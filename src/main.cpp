@@ -7,11 +7,29 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "helpers.h"
 #include "json.hpp"
+#include "spline.h"
 
 // for convenience
 using nlohmann::json;
 using std::string;
 using std::vector;
+
+
+#define MPS2MPH(_VAL) ((_VAL)*(2.2369))
+#define MPH2MPS(_VAL) ((_VAL)/(2.2369))
+#define MAX_SPEED 49.5
+#define LANE_INIT 1
+#define SPEED_INIT 0.0
+#define MAX_ACC 10.0
+#define MAX_JERK 10.0
+#define TIME_STEP 0.02
+#define LANE_WIDTH 4
+#define POINT_FORWARD_STEP 30
+#define SAFE_GAP 30
+#define NUMBER_OF_POINTS 50
+
+#define NUMBER_OF_LANES 3
+#define D2LANE(_VAL) (static_cast<int>(NUMBER_OF_LANES - (_VAL)/LANE_WIDTH))
 
 int main() {
   uWS::Hub h;
@@ -50,8 +68,12 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
+  //
+  int lane = LANE_INIT;
+  double ref_vel = SPEED_INIT;
+
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy]
+               &map_waypoints_dx,&map_waypoints_dy,&lane,&ref_vel]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -97,6 +119,136 @@ int main() {
            * TODO: define a path made up of (x,y) points that the car will visit
            *   sequentially every .02 seconds
            */
+          int prev_size = previous_path_x.size();
+
+           if(prev_size > 0)
+           {
+        	   car_s = end_path_s;
+           }
+           bool too_close = false;
+           for(int car_cnt = 0; car_cnt < sensor_fusion.size(); ++car_cnt)
+           {
+        	  float car_d = sensor_fusion[car_cnt][6];
+        	  int car_lane = D2LANE(car_d);
+        	  //if (car_d < (LANE_WIDTH*(lane+1)) && car_d > (LANE_WIDTH*lane))
+        	  if (car_lane == lane)
+        	  {
+        		  double vx = sensor_fusion[car_cnt][3];
+        		  double vy = sensor_fusion[car_cnt][4];
+        		  double check_speed = sqrt((vx*vx)+(vy*vy));
+        		  double check_car_s = sensor_fusion[car_cnt][5];
+
+        		  check_car_s += ((double)prev_size*TIME_STEP*check_speed);
+        		  if ((check_car_s > car_s) && ((check_car_s - car_s) < SAFE_GAP))
+        		  {
+        			  too_close = true;
+        		  }
+        	  }
+           }
+
+
+           if (too_close)
+           {
+        	   ref_vel -= MPS2MPH(MAX_ACC*TIME_STEP);
+           }
+           else if (ref_vel < MAX_SPEED)
+           {
+        	   ref_vel += MPS2MPH(MAX_ACC*TIME_STEP);;
+           }
+
+           vector<double> ptsx;
+           vector<double> ptsy;
+
+           double ref_x = car_x;
+           double ref_y = car_y;
+           double ref_yaw = deg2rad(car_yaw);
+
+           if (prev_size < 2)
+           {
+        	   double prev_car_x = car_x - cos(car_yaw);
+        	   double prev_car_y = car_y - sin(car_yaw);
+
+        	   ptsx.push_back(prev_car_x);
+        	   ptsx.push_back(car_x);
+
+        	   ptsy.push_back(prev_car_y);
+        	   ptsy.push_back(car_y);
+           }
+           else
+           {
+        	   ref_x = previous_path_x[prev_size - 1];
+        	   ref_y = previous_path_y[prev_size - 1];
+
+        	   double ref_x_prev = previous_path_x[prev_size - 2];
+        	   double ref_y_prev = previous_path_y[prev_size - 2];
+        	   ref_yaw = atan2(ref_y-ref_y_prev,ref_x-ref_x_prev);
+
+        	   ptsx.push_back(ref_x_prev);
+        	   ptsy.push_back(ref_y_prev);
+
+        	   ptsx.push_back(ref_x);
+        	   ptsy.push_back(ref_y);
+           }
+
+           vector<double> next_wp0 = getXY(car_s + POINT_FORWARD_STEP,(LANE_WIDTH/2 + LANE_WIDTH*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+           vector<double> next_wp1 = getXY(car_s + POINT_FORWARD_STEP*2,(LANE_WIDTH/2 + LANE_WIDTH*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+           vector<double> next_wp2 = getXY(car_s + POINT_FORWARD_STEP*3,(LANE_WIDTH/2 + LANE_WIDTH*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+
+           ptsx.push_back(next_wp0[0]);
+           ptsy.push_back(next_wp0[1]);
+
+           ptsx.push_back(next_wp1[0]);
+           ptsy.push_back(next_wp1[1]);
+
+           ptsx.push_back(next_wp2[0]);
+           ptsy.push_back(next_wp2[1]);
+
+
+          for (int cnt = 0; cnt < ptsx.size(); cnt++)
+          {
+        	  double shift_x = ptsx[cnt] - ref_x;
+        	  double shift_y = ptsy[cnt] - ref_y;
+
+        	  ptsx[cnt] = (shift_x * cos(0 - ref_yaw)) - (shift_y * sin(0 - ref_yaw));
+        	  ptsy[cnt] = (shift_x * sin(0 - ref_yaw)) + (shift_y * cos(0 - ref_yaw));
+          }
+
+          tk::spline spln;
+
+          spln.set_points(ptsx,ptsy);
+
+          for (int cnt = 0; cnt < previous_path_x.size(); ++cnt)
+          {
+        	  next_x_vals.push_back(previous_path_x[cnt]);
+        	  next_y_vals.push_back(previous_path_y[cnt]);
+          }
+
+          double target_x = POINT_FORWARD_STEP;
+          double target_y = spln(target_x);
+          double target_dist = sqrt((target_x*target_x)+(target_y*target_y));
+
+          double x_add_on = 0;
+
+          for (int cnt = 0; cnt <= NUMBER_OF_POINTS - previous_path_x.size(); ++cnt)
+          {
+        	  double N = target_dist/MPH2MPS(TIME_STEP*ref_vel);
+        	  double x_point = x_add_on + target_x/N;
+        	  double y_point = spln(x_point);
+
+        	  x_add_on = x_point;
+
+        	  double x_ref = x_point;
+        	  double y_ref = y_point;
+
+        	  x_point = x_ref * cos(ref_yaw) - y_ref*sin(ref_yaw);
+        	  y_point = x_ref * sin(ref_yaw) + y_ref*cos(ref_yaw);
+
+        	  x_point += ref_x;
+        	  y_point += ref_y;
+
+        	  next_x_vals.push_back(x_point);
+        	  next_y_vals.push_back(y_point);
+          }
 
 
           msgJson["next_x"] = next_x_vals;
