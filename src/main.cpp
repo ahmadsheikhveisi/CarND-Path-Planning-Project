@@ -8,28 +8,13 @@
 #include "helpers.h"
 #include "json.hpp"
 #include "spline.h"
+#include "vehicle.h"
+#include "parameters.h"
 
 // for convenience
 using nlohmann::json;
 using std::string;
 using std::vector;
-
-
-#define MPS2MPH(_VAL) ((_VAL)*(2.2369))
-#define MPH2MPS(_VAL) ((_VAL)/(2.2369))
-#define MAX_SPEED 49.5
-#define LANE_INIT 1
-#define SPEED_INIT 0.0
-#define MAX_ACC 10.0
-#define MAX_JERK 10.0
-#define TIME_STEP 0.02
-#define LANE_WIDTH 4
-#define POINT_FORWARD_STEP 30
-#define SAFE_GAP 30
-#define NUMBER_OF_POINTS 50
-
-#define NUMBER_OF_LANES 3
-#define D2LANE(_VAL) (static_cast<int>(NUMBER_OF_LANES - (_VAL)/LANE_WIDTH))
 
 int main() {
   uWS::Hub h;
@@ -44,7 +29,7 @@ int main() {
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
-  double max_s = 6945.554;
+  double max_s = MAX_S;
 
   std::ifstream in_map_(map_file_.c_str(), std::ifstream::in);
 
@@ -71,9 +56,10 @@ int main() {
   //
   int lane = LANE_INIT;
   double ref_vel = SPEED_INIT;
+  Vehicle ego = Vehicle(0,LANE_INIT,0,0,0,"KL");
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy,&lane,&ref_vel]
+               &map_waypoints_dx,&map_waypoints_dy,&lane,&ref_vel,&ego]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -126,18 +112,26 @@ int main() {
         	   car_s = end_path_s;
            }
            bool too_close = false;
+
+           map<int, Vehicle> otherCars;
+
            for(int car_cnt = 0; car_cnt < sensor_fusion.size(); ++car_cnt)
            {
         	  float car_d = sensor_fusion[car_cnt][6];
         	  int car_lane = D2LANE(car_d);
+			  double vx = sensor_fusion[car_cnt][3];
+			  double vy = sensor_fusion[car_cnt][4];
+			  double check_speed = sqrt((vx*vx)+(vy*vy));
+			  double check_car_s = sensor_fusion[car_cnt][5];
+
+        	  Vehicle t_car = Vehicle(sensor_fusion[car_cnt][0],car_lane,check_car_s,check_speed,0);
+
+        	  t_car.generate_predictions(NUMBER_OF_POINTS);
+        	  otherCars[t_car.idx] = t_car;
+
         	  //if (car_d < (LANE_WIDTH*(lane+1)) && car_d > (LANE_WIDTH*lane))
         	  if (car_lane == lane)
         	  {
-        		  double vx = sensor_fusion[car_cnt][3];
-        		  double vy = sensor_fusion[car_cnt][4];
-        		  double check_speed = sqrt((vx*vx)+(vy*vy));
-        		  double check_car_s = sensor_fusion[car_cnt][5];
-
         		  check_car_s += ((double)prev_size*TIME_STEP*check_speed);
         		  if ((check_car_s > car_s) && ((check_car_s - car_s) < SAFE_GAP))
         		  {
