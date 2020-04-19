@@ -22,7 +22,7 @@ class Vehicle {
   Vehicle();
   Vehicle(int id, int lane, float s, float v, float a, string state="CS");
 
-  // Destructor
+  // De-structor
   virtual ~Vehicle();
 
   // Vehicle functions
@@ -58,7 +58,6 @@ class Vehicle {
 
   void realize_next_state(vector<Vehicle> &trajectory);
 
-  void configure(vector<int> &road_data);
 
   // public Vehicle variables
   struct collider{
@@ -71,9 +70,9 @@ class Vehicle {
 
   int L = 1;
 
-  int lane, s, goal_lane, goal_s;
+  int lane, s;
 
-  float v, target_speed, a;
+  float v, a;
 
   string state;
 

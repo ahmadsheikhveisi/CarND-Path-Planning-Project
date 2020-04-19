@@ -54,12 +54,11 @@ int main() {
   }
 
   //
-  int lane = LANE_INIT;
   double ref_vel = SPEED_INIT;
-  Vehicle ego = Vehicle(0,LANE_INIT,0,0,0,"KL");
+  Vehicle ego = Vehicle(-1,LANE_INIT,0,SPEED_INIT,0,"KL");
 
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy,&lane,&ref_vel,&ego]
+               &map_waypoints_dx,&map_waypoints_dy,&ref_vel,&ego]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -126,26 +125,41 @@ int main() {
 
         	  Vehicle t_car = Vehicle(sensor_fusion[car_cnt][0],car_lane,check_car_s,check_speed,0);
 
-        	  t_car.generate_predictions(NUMBER_OF_POINTS);
+        	  t_car.generate_predictions(PREDICTION_HORIZON_SEC);
         	  otherCars[t_car.idx] = t_car;
 
+        	  //std::cout << "sensor fusion cars " << t_car.idx << " " << t_car.lane << " " << t_car.s << " " << t_car.v << std::endl;
+
         	  //if (car_d < (LANE_WIDTH*(lane+1)) && car_d > (LANE_WIDTH*lane))
-        	  if (car_lane == lane)
+        	  /*if (car_lane == lane)
         	  {
         		  check_car_s += ((double)prev_size*TIME_STEP*check_speed);
         		  if ((check_car_s > car_s) && ((check_car_s - car_s) < SAFE_GAP))
         		  {
         			  too_close = true;
         		  }
-        	  }
+        	  }*/
            }
 
+		   ego.s = car_s;
+		   ego.a = (MPH2MPS(car_speed) - ego.v)/(float)PREDICTION_HORIZON_SEC;
+		   ego.v = MPH2MPS(car_speed);
 
-           if (too_close)
+		   //std::cout << "********" << std::endl;
+
+		   //std::cout << "State " << ego.state << " s " << ego.s << " speed " << ego.v << std::endl;
+
+		   vector<Vehicle> traj = ego.choose_next_state(otherCars);
+		   ego.realize_next_state(traj);
+
+		   //std::cout << "State " << ego.state << " s " << ego.s << " speed " << ego.v << std::endl;
+
+
+           if (ref_vel > MPS2MPH(ego.v))//(too_close)
            {
         	   ref_vel -= MPS2MPH(MAX_ACC*TIME_STEP);
            }
-           else if (ref_vel < MAX_SPEED)
+           else if (ref_vel < MPS2MPH(ego.v))
            {
         	   ref_vel += MPS2MPH(MAX_ACC*TIME_STEP);;
            }
@@ -184,9 +198,9 @@ int main() {
         	   ptsy.push_back(ref_y);
            }
 
-           vector<double> next_wp0 = getXY(car_s + POINT_FORWARD_STEP,(LANE_WIDTH/2 + LANE_WIDTH*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
-           vector<double> next_wp1 = getXY(car_s + POINT_FORWARD_STEP*2,(LANE_WIDTH/2 + LANE_WIDTH*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
-           vector<double> next_wp2 = getXY(car_s + POINT_FORWARD_STEP*3,(LANE_WIDTH/2 + LANE_WIDTH*lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+           vector<double> next_wp0 = getXY(car_s + POINT_FORWARD_STEP,(LANE_WIDTH/2 + LANE_WIDTH*ego.lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+           vector<double> next_wp1 = getXY(car_s + POINT_FORWARD_STEP*2,(LANE_WIDTH/2 + LANE_WIDTH*ego.lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+           vector<double> next_wp2 = getXY(car_s + POINT_FORWARD_STEP*3,(LANE_WIDTH/2 + LANE_WIDTH*ego.lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
 
            ptsx.push_back(next_wp0[0]);
            ptsy.push_back(next_wp0[1]);
@@ -225,7 +239,7 @@ int main() {
 
           for (int cnt = 0; cnt <= NUMBER_OF_POINTS - previous_path_x.size(); ++cnt)
           {
-        	  double N = target_dist/MPH2MPS(TIME_STEP*ref_vel);
+        	  double N = target_dist/(TIME_STEP*MPH2MPS(ref_vel));
         	  double x_point = x_add_on + target_x/N;
         	  double y_point = spln(x_point);
 

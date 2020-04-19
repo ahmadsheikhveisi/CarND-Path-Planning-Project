@@ -14,24 +14,24 @@ using std::map;
 using std::string;
 using std::vector;
 
-float calculate_cost(const Vehicle &vehicle,
-                     const map<int, vector<Vehicle>> &predictions,
+float calculate_cost(const Vehicle &egoVehicle,
+                     const map<int, Vehicle> &otherCars,
                      const vector<Vehicle> &trajectory);
 
-float goal_distance_cost(const Vehicle &vehicle,
+/*float goal_distance_cost(const Vehicle &vehicle,
                          const vector<Vehicle> &trajectory,
                          const map<int, vector<Vehicle>> &predictions,
-                         map<string, float> &data);
+                         map<string, float> &data);*/
 
 float inefficiency_cost(const Vehicle &vehicle,
                         const vector<Vehicle> &trajectory,
-                        const map<int, vector<Vehicle>> &predictions,
+                        const map<int, Vehicle> &otherCars,
                         map<string, float> &data);
 
-float lane_speed(const map<int, vector<Vehicle>> &predictions, int lane);
+float lane_speed(const map<int, Vehicle> &otherCars, int lane);
 
 map<string, float> get_helper_data(const Vehicle &vehicle,
                                    const vector<Vehicle> &trajectory,
-                                   const map<int, vector<Vehicle>> &predictions);
+                                   const map<int, Vehicle> &otherCars);
 
 #endif  // COST_H
