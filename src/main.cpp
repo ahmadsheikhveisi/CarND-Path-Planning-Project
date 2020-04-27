@@ -135,7 +135,7 @@ int main() {
         	  t_car.generate_predictions(pred_start_time,pred_duration_time);
         	  otherCars[t_car.idx] = t_car;
 
-        	  std::cout << "sensor fusion cars " << t_car.idx << " " << t_car.lane << " " << t_car.s << " " << t_car.v << std::endl;
+        	  std::cout << "sensor fusion cars id " << t_car.idx << " d " << t_car_d << " lane " << t_car.lane << " s " << t_car.s << " v " << t_car.v << std::endl;
 
         	  //if (car_d < (LANE_WIDTH*(lane+1)) && car_d > (LANE_WIDTH*lane))
         	  /*if (car_lane == lane)
@@ -229,9 +229,19 @@ int main() {
            }
            else*/
            {
-               vector<double> next_wp0 = getXY(ego.s + POINT_FORWARD_STEP,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
-               vector<double> next_wp1 = getXY(ego.s + POINT_FORWARD_STEP*2,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
-               vector<double> next_wp2 = getXY(ego.s + POINT_FORWARD_STEP*3,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+        	   double temp_s;
+        	   if(prev_size > 0)
+        	   {
+        		   temp_s = end_path_s;
+        	   }
+        	   else
+        	   {
+        		   temp_s = ego.s;
+        	   }
+        	   //vector<double> next_wp0 = getXY(ego.s,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+               vector<double> next_wp0 = getXY(temp_s + POINT_FORWARD_STEP,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+               vector<double> next_wp1 = getXY(temp_s + POINT_FORWARD_STEP*2,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+               vector<double> next_wp2 = getXY(temp_s + POINT_FORWARD_STEP*3,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
 
                ptsx.push_back(next_wp0[0]);
                ptsy.push_back(next_wp0[1]);
@@ -252,7 +262,7 @@ int main() {
         	  ptsx[cnt] = (shift_x * cos(0 - ref_yaw)) - (shift_y * sin(0 - ref_yaw));
         	  ptsy[cnt] = (shift_x * sin(0 - ref_yaw)) + (shift_y * cos(0 - ref_yaw));
 
-        	  std::cout << " ptsx " << ptsx[cnt] << std::endl;
+        	  //std::cout << " ptsx " << ptsx[cnt] << std::endl;
           }
 
           tk::spline spln;
@@ -269,7 +279,7 @@ int main() {
           double target_y = spln(target_x);
           double target_dist = sqrt((target_x*target_x)+(target_y*target_y));
 
-          std::cout << " target_x " << target_x << " target_y " << target_y << " target_dist " << target_dist << std::endl;
+          //std::cout << " target_x " << target_x << " target_y " << target_y << " target_dist " << target_dist << std::endl;
 
           /*vector<double> pst;
           vector<double> ped;
@@ -300,7 +310,7 @@ int main() {
         	  double x_point = x_add_on + target_x/N;
         	  double y_point = spln(x_point);
 
-        	  std::cout << " dist seg " << dist_seg << " N " << N << " xpoint " << x_point << " y_point " << y_point << std::endl;
+        	  //std::cout << " dist seg " << dist_seg << " N " << N << " xpoint " << x_point << " y_point " << y_point << std::endl;
 
         	  x_add_on = x_point;
 
