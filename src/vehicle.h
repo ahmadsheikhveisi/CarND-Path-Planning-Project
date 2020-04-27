@@ -20,7 +20,7 @@ class Vehicle {
  public:
   // Constructors
   Vehicle();
-  Vehicle(int id, int lane, float s, float v, float a, string state="CS");
+  Vehicle(int id, int lane, double s, double v, double a, string state="CS");
 
   // De-structor
   virtual ~Vehicle();
@@ -32,7 +32,7 @@ class Vehicle {
 
   vector<Vehicle> generate_trajectory(string state, map<int, Vehicle> &otherCars);
 
-  vector<float> get_kinematics(map<int, Vehicle> &otherCars, int t_lane);
+  vector<double> get_kinematics(map<int, Vehicle> &otherCars, int t_lane);
 
   vector<Vehicle> constant_speed_trajectory();
 
@@ -46,7 +46,7 @@ class Vehicle {
 
   void increment(int dt);
 
-  float position_at(float t);
+  double position_at(double t);
 
   bool get_vehicle_behind(map<int, Vehicle> &otherCars, int t_lane,
                           Vehicle &rVehicle);
@@ -54,7 +54,7 @@ class Vehicle {
   bool get_vehicle_ahead(map<int, Vehicle> &otherCars, int t_lane,
                          Vehicle &rVehicle);
 
-  void generate_predictions(int horizon=2);
+  void generate_predictions(double start_time, double horizon);
 
   void realize_next_state(vector<Vehicle> &trajectory);
 
@@ -65,20 +65,26 @@ class Vehicle {
     int  time; // time collision happens
   };
 
-  map<string, int> lane_direction = {{"PLCL", 1}, {"LCL", 1},
-                                     {"LCR", -1}, {"PLCR", -1}};
+  map<string, int> lane_direction = {{"PLCL", -1}, {"LCL", -1},
+		  	  	  	  	  	  	  	  {"LCR", 1}, {"PLCR", 1}};
 
   int L = 1;
 
-  int lane, s;
+  int lane;
 
-  float v, a;
+  double v, a, s;
 
   string state;
 
   int idx;
 
-  vector<double> prediction;
+  vector<Vehicle> prediction;
+
+  double pred_horizon;
+
+  bool initialized = false;
+
+  void init(int t_lane, double t_s, double t_v, double t_a);
 
 };
 

@@ -53,12 +53,13 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
-  //
-  double ref_vel = SPEED_INIT;
+  //this holds the last behavioral planning output
   Vehicle ego = Vehicle(-1,LANE_INIT,0,SPEED_INIT,0,"KL");
 
+  double ref_vel = SPEED_INIT;
+
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy,&ref_vel,&ego]
+               &map_waypoints_dx,&map_waypoints_dy,&ego,&ref_vel]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -105,30 +106,36 @@ int main() {
            *   sequentially every .02 seconds
            */
           int prev_size = previous_path_x.size();
+          int points_needed = NUMBER_OF_POINTS - prev_size;
 
-           if(prev_size > 0)
+           /*if(prev_size > 0)
            {
         	   car_s = end_path_s;
-           }
-           bool too_close = false;
+           }*/
+          double pred_start_time = (double)prev_size * (double)TIME_STEP;
+          double pred_duration_time = PREDICTION_HORIZON_SEC;//(double)(NUMBER_OF_POINTS - prev_size) * (double)TIME_STEP;
+          std::cout << "##########" << std::endl;
+          std::cout << "points needed " << points_needed << std::endl;
+          std::cout << "car s " << car_s << " car d " << car_d << " car speed " << car_speed << std::endl;
+
 
            map<int, Vehicle> otherCars;
 
            for(int car_cnt = 0; car_cnt < sensor_fusion.size(); ++car_cnt)
            {
-        	  float car_d = sensor_fusion[car_cnt][6];
-        	  int car_lane = D2LANE(car_d);
+        	  float t_car_d = sensor_fusion[car_cnt][6];
+        	  int t_car_lane = D2LANE(t_car_d);
 			  double vx = sensor_fusion[car_cnt][3];
 			  double vy = sensor_fusion[car_cnt][4];
 			  double check_speed = sqrt((vx*vx)+(vy*vy));
 			  double check_car_s = sensor_fusion[car_cnt][5];
 
-        	  Vehicle t_car = Vehicle(sensor_fusion[car_cnt][0],car_lane,check_car_s,check_speed,0);
+        	  Vehicle t_car = Vehicle(sensor_fusion[car_cnt][0],t_car_lane,check_car_s,check_speed,0);
 
-        	  t_car.generate_predictions(PREDICTION_HORIZON_SEC);
+        	  t_car.generate_predictions(pred_start_time,pred_duration_time);
         	  otherCars[t_car.idx] = t_car;
 
-        	  //std::cout << "sensor fusion cars " << t_car.idx << " " << t_car.lane << " " << t_car.s << " " << t_car.v << std::endl;
+        	  std::cout << "sensor fusion cars " << t_car.idx << " " << t_car.lane << " " << t_car.s << " " << t_car.v << std::endl;
 
         	  //if (car_d < (LANE_WIDTH*(lane+1)) && car_d > (LANE_WIDTH*lane))
         	  /*if (car_lane == lane)
@@ -141,28 +148,41 @@ int main() {
         	  }*/
            }
 
-		   ego.s = car_s;
+		   /*ego.s = car_s;
 		   ego.a = (MPH2MPS(car_speed) - ego.v)/(float)PREDICTION_HORIZON_SEC;
-		   ego.v = MPH2MPS(car_speed);
+		   ego.v = MPH2MPS(car_speed);*/
 
-		   //std::cout << "********" << std::endl;
+		   std::cout << "********" << std::endl;
+		   ego.init(D2LANE(car_d), car_s, MPH2MPS(car_speed),0);
+		   vector<Vehicle> traj;
+		   if (points_needed > 0)
+		   {
+			   if(prev_size > 0)
+			   {
+				   ego.s = end_path_s;
+			   }
+			   ego.v = ref_vel;
 
-		   //std::cout << "State " << ego.state << " s " << ego.s << " speed " << ego.v << std::endl;
+			   std::cout << "State " << ego.state << " lane " << ego.lane << " s " << ego.s << " speed " << MPS2MPH(ego.v) << " ego acc " << ego.a << std::endl;
 
-		   vector<Vehicle> traj = ego.choose_next_state(otherCars);
-		   ego.realize_next_state(traj);
-
-		   //std::cout << "State " << ego.state << " s " << ego.s << " speed " << ego.v << std::endl;
+			   //ego.generate_predictions(0.0,pred_duration_time);
+			   traj = ego.choose_next_state(otherCars);
 
 
-           if (ref_vel > MPS2MPH(ego.v))//(too_close)
+			   std::cout << "State " << traj[1].state << " lane " << traj[1].lane << " s " << traj[1].s << " speed " << traj[1].v << " ego acc " << ego.a << std::endl;
+
+			   ego.realize_next_state(traj);
+
+		   }
+
+           /*if (ref_vel > MPS2MPH(ego.v))//(too_close)
            {
         	   ref_vel -= MPS2MPH(MAX_ACC*TIME_STEP);
            }
            else if (ref_vel < MPS2MPH(ego.v))
            {
         	   ref_vel += MPS2MPH(MAX_ACC*TIME_STEP);;
-           }
+           }*/
 
            vector<double> ptsx;
            vector<double> ptsy;
@@ -171,6 +191,7 @@ int main() {
            double ref_y = car_y;
            double ref_yaw = deg2rad(car_yaw);
 
+           // get the last two points
            if (prev_size < 2)
            {
         	   double prev_car_x = car_x - cos(car_yaw);
@@ -198,20 +219,31 @@ int main() {
         	   ptsy.push_back(ref_y);
            }
 
-           vector<double> next_wp0 = getXY(car_s + POINT_FORWARD_STEP,(LANE_WIDTH/2 + LANE_WIDTH*ego.lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
-           vector<double> next_wp1 = getXY(car_s + POINT_FORWARD_STEP*2,(LANE_WIDTH/2 + LANE_WIDTH*ego.lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
-           vector<double> next_wp2 = getXY(car_s + POINT_FORWARD_STEP*3,(LANE_WIDTH/2 + LANE_WIDTH*ego.lane),map_waypoints_s,map_waypoints_x,map_waypoints_y);
 
-           ptsx.push_back(next_wp0[0]);
-           ptsy.push_back(next_wp0[1]);
+           /*if (traj.size() > 0)
+           {
+			   vector<double> next_wp1 = getXY(traj[1].s,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*traj[1].lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
 
-           ptsx.push_back(next_wp1[0]);
-           ptsy.push_back(next_wp1[1]);
+			   ptsx.push_back(next_wp1[0]);
+			   ptsy.push_back(next_wp1[1]);
+           }
+           else*/
+           {
+               vector<double> next_wp0 = getXY(ego.s + POINT_FORWARD_STEP,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+               vector<double> next_wp1 = getXY(ego.s + POINT_FORWARD_STEP*2,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+               vector<double> next_wp2 = getXY(ego.s + POINT_FORWARD_STEP*3,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
 
-           ptsx.push_back(next_wp2[0]);
-           ptsy.push_back(next_wp2[1]);
+               ptsx.push_back(next_wp0[0]);
+               ptsy.push_back(next_wp0[1]);
 
+			   ptsx.push_back(next_wp1[0]);
+			   ptsy.push_back(next_wp1[1]);
 
+			   ptsx.push_back(next_wp2[0]);
+			   ptsy.push_back(next_wp2[1]);
+           }
+
+           // move the reference points to the car coordinates
           for (int cnt = 0; cnt < ptsx.size(); cnt++)
           {
         	  double shift_x = ptsx[cnt] - ref_x;
@@ -219,29 +251,56 @@ int main() {
 
         	  ptsx[cnt] = (shift_x * cos(0 - ref_yaw)) - (shift_y * sin(0 - ref_yaw));
         	  ptsy[cnt] = (shift_x * sin(0 - ref_yaw)) + (shift_y * cos(0 - ref_yaw));
+
+        	  std::cout << " ptsx " << ptsx[cnt] << std::endl;
           }
 
           tk::spline spln;
 
           spln.set_points(ptsx,ptsy);
-
+          // add the previous points
           for (int cnt = 0; cnt < previous_path_x.size(); ++cnt)
           {
         	  next_x_vals.push_back(previous_path_x[cnt]);
         	  next_y_vals.push_back(previous_path_y[cnt]);
           }
 
-          double target_x = POINT_FORWARD_STEP;
+          double target_x = ptsx[ptsx.size() - 1];
           double target_y = spln(target_x);
           double target_dist = sqrt((target_x*target_x)+(target_y*target_y));
 
+          std::cout << " target_x " << target_x << " target_y " << target_y << " target_dist " << target_dist << std::endl;
+
+          /*vector<double> pst;
+          vector<double> ped;
+          vector<double> poly;
+
+          if (traj.size() > 0)
+          {
+			  pst = {ego.s,ego.v,ego.a};
+			  ped = {traj[1].s,traj[1].v,traj[1].a};
+			  poly = JMT(pst,ped,pred_duration_time);
+          }*/
+
           double x_add_on = 0;
 
-          for (int cnt = 0; cnt <= NUMBER_OF_POINTS - previous_path_x.size(); ++cnt)
+          // generate new points
+          for (int cnt = 0; cnt < NUMBER_OF_POINTS - previous_path_x.size(); ++cnt)
           {
-        	  double N = target_dist/(TIME_STEP*MPH2MPS(ref_vel));
+        	  if (ref_vel < ego.v)
+        	  {
+        		  ref_vel += MAX_ACC*TIME_STEP;
+        	  }
+        	  else if (ref_vel > ego.v)
+        	  {
+        		  ref_vel -= MAX_ACC*TIME_STEP;
+        	  }
+        	  double dist_seg = ref_vel * TIME_STEP;//((traj[1].v + ego.v) * TIME_STEP / 2.0);//evaluate_poly(poly,(cnt + 1)*TIME_STEP) - evaluate_poly(poly,cnt*TIME_STEP);//
+        	  double N = target_dist/(dist_seg);
         	  double x_point = x_add_on + target_x/N;
         	  double y_point = spln(x_point);
+
+        	  std::cout << " dist seg " << dist_seg << " N " << N << " xpoint " << x_point << " y_point " << y_point << std::endl;
 
         	  x_add_on = x_point;
 
@@ -257,6 +316,8 @@ int main() {
         	  next_x_vals.push_back(x_point);
         	  next_y_vals.push_back(y_point);
           }
+
+          std::cout << " points generated " << next_x_vals.size() << std::endl;
 
 
           msgJson["next_x"] = next_x_vals;
