@@ -14,15 +14,17 @@
 #include "vehicle.h"
 #include "parameters.h"
 #include "iostream"
+#include <limits>
 
 using std::string;
 using std::vector;
 
 
 /**
- * TODO: change weights for cost functions.
+ * weights for cost functions.
  */
 const double EFFICIENCY = pow(10.0,5.0);
+const double TRAFIC_AVOIDANCE = 0.0;//pow(10.0,0.0);
 
 // Here we have provided two possible suggestions for cost functions, but feel
 //   free to use your own! The weighted cost over all cost functions is computed
@@ -52,6 +54,25 @@ const double EFFICIENCY = pow(10.0,5.0);
   return cost;
 }*/
 
+double traffic_avoidance_cost(const Vehicle &vehicle,
+                        const vector<Vehicle> &trajectory,
+                        const map<int, Vehicle> &otherCars,
+                        map<string, double> &data)
+{
+	double res_cost = 0.0;
+
+	for (auto t_vehicle : otherCars)
+	{
+		if ((t_vehicle.second.prediction[0].lane == static_cast<int>(data["intended_lane"])) &&
+				(t_vehicle.second.prediction[0].s > vehicle.s))
+		{
+			res_cost += 1.0;
+		}
+	}
+
+	return res_cost;
+}
+
 double inefficiency_cost(const Vehicle &vehicle,
                         const vector<Vehicle> &trajectory,
                         const map<int, Vehicle> &otherCars,
@@ -71,7 +92,7 @@ double inefficiency_cost(const Vehicle &vehicle,
     proposed_speed_final = MAX_SPEED_MS;
   }
 
-  std::cout << "intended_speed " << proposed_speed_intended << " final speed " << proposed_speed_final << std::endl;
+  //std::cout << "intended_speed " << proposed_speed_intended << " final speed " << proposed_speed_final << std::endl;
 
   double cost = (2.0*MAX_SPEED_MS - proposed_speed_intended
              - proposed_speed_final)/MAX_SPEED_MS;
@@ -93,8 +114,8 @@ double calculate_cost(const Vehicle &egoVehicle,
   vector<std::function<double(const Vehicle &, const vector<Vehicle> &,
                              const map<int, Vehicle> &,
                              map<string, double> &)
-    >> cf_list = { inefficiency_cost};//goal_distance_cost,
-  vector<double> weight_list = {EFFICIENCY};
+    >> cf_list = { inefficiency_cost,traffic_avoidance_cost};//goal_distance_cost,
+  vector<double> weight_list = {EFFICIENCY,TRAFIC_AVOIDANCE};
 
   for (int i = 0; i < cf_list.size(); ++i) {
     double new_cost = weight_list[i]*cf_list[i](egoVehicle, trajectory, otherCars,
@@ -120,17 +141,24 @@ map<string, double> get_helper_data(const Vehicle &vehicle,
   map<string, double> trajectory_data;
   Vehicle trajectory_last = trajectory[1];
   double intended_speed;
+  int intended_lane;
 
   if ((trajectory_last.state.compare("PLCL") == 0) || (trajectory_last.state.compare("PLCR") == 0)) {
 	  intended_speed = trajectory[2].v;
+	  intended_lane = trajectory[2].lane;
   } else {
 	  intended_speed = trajectory_last.v;
+	  intended_lane = trajectory_last.lane;
   }
 
   //float distance_to_goal = vehicle.goal_s - trajectory_last.s;
-  double final_speed = trajectory[1].v;
+  double final_speed = trajectory_last.v;
+  double final_lane = trajectory_last.lane;
+
   trajectory_data["intended_speed"] = intended_speed;
   trajectory_data["final_speed"] = final_speed;
+  trajectory_data["intended_lane"] = intended_lane;
+  trajectory_data["final_lane"] = final_lane;
   //trajectory_data["distance_to_goal"] = distance_to_goal;
 
   return trajectory_data;

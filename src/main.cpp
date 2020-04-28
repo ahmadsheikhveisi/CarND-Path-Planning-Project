@@ -114,9 +114,9 @@ int main() {
            }*/
           double pred_start_time = (double)prev_size * (double)TIME_STEP;
           double pred_duration_time = PREDICTION_HORIZON_SEC;//(double)(NUMBER_OF_POINTS - prev_size) * (double)TIME_STEP;
-          std::cout << "##########" << std::endl;
-          std::cout << "points needed " << points_needed << std::endl;
-          std::cout << "car s " << car_s << " car d " << car_d << " car speed " << car_speed << std::endl;
+          //std::cout << "##########" << std::endl;
+          //std::cout << "points needed " << points_needed << std::endl;
+          //std::cout << "car s " << car_s << " car d " << car_d << " car speed " << car_speed << std::endl;
 
 
            map<int, Vehicle> otherCars;
@@ -135,7 +135,7 @@ int main() {
         	  t_car.generate_predictions(pred_start_time,pred_duration_time);
         	  otherCars[t_car.idx] = t_car;
 
-        	  std::cout << "sensor fusion cars id " << t_car.idx << " d " << t_car_d << " lane " << t_car.lane << " s " << t_car.s << " v " << t_car.v << std::endl;
+        	  //std::cout << "sensor fusion cars id " << t_car.idx << " d " << t_car_d << " lane " << t_car.lane << " s " << t_car.s << " v " << t_car.v << std::endl;
 
         	  //if (car_d < (LANE_WIDTH*(lane+1)) && car_d > (LANE_WIDTH*lane))
         	  /*if (car_lane == lane)
@@ -152,10 +152,10 @@ int main() {
 		   ego.a = (MPH2MPS(car_speed) - ego.v)/(float)PREDICTION_HORIZON_SEC;
 		   ego.v = MPH2MPS(car_speed);*/
 
-		   std::cout << "********" << std::endl;
+		   //std::cout << "********" << std::endl;
 		   ego.init(D2LANE(car_d), car_s, MPH2MPS(car_speed),0);
 		   vector<Vehicle> traj;
-		   if (points_needed > 0)
+		   if ((points_needed > 0) && (D2LANE(car_d) == ego.lane))
 		   {
 			   if(prev_size > 0)
 			   {
@@ -163,13 +163,13 @@ int main() {
 			   }
 			   ego.v = ref_vel;
 
-			   std::cout << "State " << ego.state << " lane " << ego.lane << " s " << ego.s << " speed " << MPS2MPH(ego.v) << " ego acc " << ego.a << std::endl;
+			   //std::cout << "State " << ego.state << " lane " << ego.lane << " s " << ego.s << " speed " << MPS2MPH(ego.v) << " ego acc " << ego.a << std::endl;
 
 			   //ego.generate_predictions(0.0,pred_duration_time);
 			   traj = ego.choose_next_state(otherCars);
 
 
-			   std::cout << "State " << traj[1].state << " lane " << traj[1].lane << " s " << traj[1].s << " speed " << traj[1].v << " ego acc " << ego.a << std::endl;
+			   //std::cout << "State " << traj[1].state << " lane " << traj[1].lane << " s " << traj[1].s << " speed " << traj[1].v << " ego acc " << ego.a << std::endl;
 
 			   ego.realize_next_state(traj);
 
@@ -327,7 +327,7 @@ int main() {
         	  next_y_vals.push_back(y_point);
           }
 
-          std::cout << " points generated " << next_x_vals.size() << std::endl;
+          //std::cout << " points generated " << next_x_vals.size() << std::endl;
 
 
           msgJson["next_x"] = next_x_vals;

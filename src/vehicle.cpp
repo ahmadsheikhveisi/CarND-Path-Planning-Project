@@ -13,6 +13,7 @@
 #include "cost.h"
 #include "parameters.h"
 #include "iostream"
+#include <limits>
 
 using std::string;
 using std::vector;
@@ -74,16 +75,19 @@ vector<Vehicle> Vehicle::choose_next_state(map<int, Vehicle> &otherCars) {
 
 	for (auto state : possible_successors)
 	{
-		std::cout << "^^^^ state " << state << std::endl;
+		//std::cout << "^^^^ state " << state << std::endl;
 		vector<Vehicle> trajectory = generate_trajectory(state,otherCars);
+
+		double t_cost = std::numeric_limits<double>::max();
 
 		if (trajectory.size() > 0)
 		{
-			double t_cost = calculate_cost(*this,otherCars,trajectory);
-			cost.push_back(t_cost);
-			std::cout << "cost for " << state << " " << t_cost << std::endl;
+			t_cost = calculate_cost(*this,otherCars,trajectory);
+
+			//std::cout << "cost for " << state << " " << t_cost << std::endl;
 		}
-		std::cout << "^^^^^^^^^^ " << std::endl;
+		cost.push_back(t_cost);
+		//std::cout << "^^^^^^^^^^ " << std::endl;
 	}
 
 	auto iter = std::min_element(begin(cost), end(cost));
@@ -92,6 +96,11 @@ vector<Vehicle> Vehicle::choose_next_state(map<int, Vehicle> &otherCars) {
 	if (next_best_state.compare(this->state) != 0)
 	{
 		std::cout << "State change from " << this->state << " to " << next_best_state << " with cost " << *iter << std::endl;
+		for (int cnt = 0; cnt < cost.size(); ++cnt)
+		{
+			std::cout << "for the state " << possible_successors[cnt] << " cost is " << cost[cnt] << std::endl;
+		}
+		std::cout << "************" << std::endl;
 	}
 
 
@@ -106,13 +115,13 @@ vector<string> Vehicle::successor_states() {
   states.push_back("KL");
   string state = this->state;
   if(state.compare("KL") == 0) {
-	  if (lane != (NUMBER_OF_LANES - 1))
-	  {
-		  states.push_back("PLCR");
-	  }
 	  if (lane != 0)
 	  {
 		  states.push_back("PLCL");
+	  }
+	  if (lane != (NUMBER_OF_LANES - 1))
+	  {
+		  states.push_back("PLCR");
 	  }
   } else if (state.compare("PLCL") == 0) {
     if (lane != 0) {
@@ -171,7 +180,7 @@ vector<double> Vehicle::get_kinematics(map<int, Vehicle> &otherCars,
       /*double max_velocity_in_front = (double)(vehicle_ahead_t1.s - this->s
                                   - SAFE_GAP)/this->pred_horizon + vehicle_ahead_t1.v
                                   - 0.5 * (this->a) * this->pred_horizon;*/
-      std::cout << "max velocity in front " << max_velocity_in_front << " max velocity acc " << max_velocity_accel_limit << std::endl;
+      //std::cout << "max velocity in front " << max_velocity_in_front << " max velocity acc " << max_velocity_accel_limit << std::endl;
       new_velocity = std::min(std::min(max_velocity_in_front,
                                        max_velocity_accel_limit),(double)MAX_SPEED_MS);
     }
@@ -182,7 +191,7 @@ vector<double> Vehicle::get_kinematics(map<int, Vehicle> &otherCars,
   new_accel = (new_velocity - this->v)/this->pred_horizon; //  (v_1 - v_0)/t = acceleration
   new_position = this->s + this->v*this->pred_horizon + this->pred_horizon*this->pred_horizon*new_accel / 2.0; //
 
-  std::cout << "new accel " << new_accel << " new position " << new_position << std::endl;
+  //std::cout << "new accel " << new_accel << " new position " << new_position << std::endl;
 
   return{new_position, new_velocity, new_accel};
 }
@@ -198,7 +207,7 @@ vector<Vehicle> Vehicle::constant_speed_trajectory() {
 vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, Vehicle> &otherCars) {
   // Generate a keep lane trajectory.
   vector<Vehicle> trajectory = {Vehicle(this->idx,lane, this->s, this->v, this->a, this->state)};
-  std::cout << "kinematics for lane " << this->lane << std::endl;
+  //std::cout << "kinematics for lane " << this->lane << std::endl;
   vector<double> kinematics = get_kinematics(otherCars, this->lane);
   double new_s = kinematics[0];
   double new_v = kinematics[1];
@@ -217,16 +226,26 @@ vector<Vehicle> Vehicle::prep_lane_change_trajectory(string state,
   int new_lane = this->lane + lane_direction[state];
   vector<Vehicle> trajectory = {Vehicle(this->idx,this->lane, this->s, this->v, this->a,
                                         this->state)};
-  std::cout << "kinematics for lane " << this->lane << std::endl;
+  //std::cout << "kinematics for lane " << this->lane << std::endl;
   vector<double> curr_lane_new_kinematics = get_kinematics(otherCars, this->lane);
-  std::cout << "kinematics for new lane " << new_lane << std::endl;
+  //std::cout << "kinematics for new lane " << new_lane << std::endl;
   vector<double> next_lane_new_kinematics = get_kinematics(otherCars, new_lane);
 
-  Vehicle vehicle_behind;
+  Vehicle vehicle_other;
   bool collision_danger = false;
-  if (get_vehicle_behind(otherCars, this->lane, vehicle_behind)) {
+  if (get_vehicle_ahead(otherCars, this->lane, vehicle_other)) {
+	  if ((vehicle_other.prediction[0].s - SAFE_GAP) < this->s)
+	  {
+		  collision_danger = true;
+		  new_s = curr_lane_new_kinematics[0];
+		  new_v = curr_lane_new_kinematics[1];
+		  new_a = curr_lane_new_kinematics[2];
+	  }
+
+  }
+  if (get_vehicle_behind(otherCars, this->lane, vehicle_other)) {
     // if there is car behind, is it safe to get to the next lane speed?
-	  if ((vehicle_behind.prediction[1].s + SAFE_GAP) >= next_lane_new_kinematics[0])
+	  if ((vehicle_other.prediction[1].s + SAFE_GAP) >= next_lane_new_kinematics[0])
 	  {
 		  collision_danger = true;
 		  new_s = curr_lane_new_kinematics[0];
@@ -277,7 +296,7 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state,
   {
 	  if (next_lane_vehicle.prediction[0].s < (this->s + SAFE_GAP))
 	  {
-		  std::cout << "it is not safe ahead " << next_lane_vehicle.idx << " is too close " << next_lane_vehicle.prediction[0].s << std::endl;
+		  //std::cout << "it is not safe ahead " << next_lane_vehicle.idx << " is too close " << next_lane_vehicle.prediction[0].s << std::endl;
 		  return trajectory;
 	  }
   }
@@ -285,7 +304,7 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state,
   {
 	  if (next_lane_vehicle.prediction[0].s > (this->s - (SAFE_GAP/2.0)))
 	  {
-		  std::cout << "it is not safe behind " << next_lane_vehicle.idx << " is too close " << next_lane_vehicle.prediction[0].s << std::endl;
+		  //std::cout << "it is not safe behind " << next_lane_vehicle.idx << " is too close " << next_lane_vehicle.prediction[0].s << std::endl;
 		  return trajectory;
 	  }
   }
@@ -316,8 +335,8 @@ bool Vehicle::get_vehicle_behind(map<int, Vehicle> &otherCars,
        it != otherCars.end(); ++it) {
     temp_vehicle = it->second;
     Vehicle temp_vehicle_t1 = temp_vehicle.prediction[0];
-    if (temp_vehicle_t1.lane == t_lane && temp_vehicle_t1.s < this->s //
-        && temp_vehicle_t1.s > max_s) {
+    if ((temp_vehicle_t1.lane == t_lane) && (temp_vehicle_t1.s < this->s) //
+        && (temp_vehicle_t1.s > max_s)) {
       max_s = temp_vehicle_t1.s;
       rVehicle = temp_vehicle;
       found_vehicle = true;
@@ -325,11 +344,11 @@ bool Vehicle::get_vehicle_behind(map<int, Vehicle> &otherCars,
   }
   if (found_vehicle)
   {
-	  std::cout << "found vehicle behind " << rVehicle.s << " v " << rVehicle.v << " lane " << rVehicle.lane <<  std::endl;
+	  //std::cout << "found vehicle behind " << rVehicle.s << " v " << rVehicle.v << " lane " << rVehicle.lane <<  std::endl;
   }
   else
   {
-	  std::cout << "Not found behind " << t_lane << std::endl;
+	  //std::cout << "Not found behind " << t_lane << std::endl;
   }
 
   return found_vehicle;
@@ -355,11 +374,11 @@ bool Vehicle::get_vehicle_ahead(map<int, Vehicle> &otherCars,
   }
   if (found_vehicle)
   {
-	  std::cout << "found vehicle ahead " << rVehicle.s << " v " << rVehicle.v << " lane " << rVehicle.lane <<  std::endl;
+	  //std::cout << "found vehicle ahead " << rVehicle.s << " v " << rVehicle.v << " lane " << rVehicle.lane <<  std::endl;
   }
   else
   {
-	  std::cout << "Not found ahead " << t_lane << std::endl;
+	  //std::cout << "Not found ahead " << t_lane << std::endl;
   }
 
   return found_vehicle;

@@ -19,7 +19,7 @@
 #define TIME_STEP 0.02
 #define LANE_WIDTH 4
 #define POINT_FORWARD_STEP 30
-#define SAFE_GAP 20//15 //10
+#define SAFE_GAP 20//15//10
 #define NUMBER_OF_POINTS 50
 #define MAX_S 6945.554
 #define PREDICTION_HORIZON_SEC 4
