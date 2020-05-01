@@ -48,8 +48,6 @@ void Vehicle::init(int t_lane, double t_s, double t_v, double t_a)
 
 vector<Vehicle> Vehicle::choose_next_state(map<int, Vehicle> &otherCars) {
   /**
-   * Here you can implement the transition_function code from the Behavior
-   *   Planning Pseudocode classroom concept.
    *
    * @param A predictions map. This is a map of vehicle id keys with predicted
    *   vehicle trajectories as values. Trajectories are a vector of Vehicle
@@ -125,13 +123,13 @@ vector<string> Vehicle::successor_states() {
 	  }
   } else if (state.compare("PLCL") == 0) {
     if (lane != 0) {
-      states.push_back("PLCL");
       states.push_back("LCL");
+      states.push_back("PLCL");
     }
   } else if (state.compare("PLCR") == 0) {
     if (lane != (NUMBER_OF_LANES - 1)) {
-      states.push_back("PLCR");
       states.push_back("LCR");
+      states.push_back("PLCR");
     }
   }
 
@@ -170,10 +168,7 @@ vector<double> Vehicle::get_kinematics(map<int, Vehicle> &otherCars,
   Vehicle vehicle_behind;
 
   if (get_vehicle_ahead(otherCars, t_lane, vehicle_ahead)) {
-    /*if (get_vehicle_behind(otherCars, t_lane, vehicle_behind)) {
-      // must travel at the speed of traffic, regardless of preferred buffer
-      new_velocity = vehicle_ahead.v;
-    } else*/ {
+     {
     	Vehicle vehicle_ahead_t1 = vehicle_ahead.prediction[0];
     	new_accel = 2 / (this->pred_horizon * this->pred_horizon) * (vehicle_ahead.prediction[1].s - this->s - SAFE_GAP - this->v * this->pred_horizon);
     	double max_velocity_in_front = new_accel * this->pred_horizon + this->v;
@@ -280,21 +275,19 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state,
   int new_lane = this->lane + lane_direction[state];
   vector<Vehicle> trajectory;
   Vehicle next_lane_vehicle;
-  // Check if a lane change is possible (check if another vehicle occupies
-  //   that spot).
-  /*for (map<int, Vehicle>::iterator it = otherCars.begin();
-       it != otherCars.end(); ++it) {
-    next_lane_vehicle = it->second;
-    if ((next_lane_vehicle.lane == new_lane) &&
-    		((next_lane_vehicle.prediction[0].s < (this->s + SAFE_GAP)) || (next_lane_vehicle.prediction[0].s > (this->s - SAFE_GAP)))) {
-      // If lane change is not possible, return empty trajectory.
-    	std::cout << "it is not safe " << next_lane_vehicle.idx << " is too close " << next_lane_vehicle.prediction[0].s << std::endl;
-      return trajectory;
-    }
-  }*/
+  // Check if a lane change is possible .
+
+  Vehicle vehicle_other;
+  if (get_vehicle_ahead(otherCars, this->lane, vehicle_other)) {
+	  if ((vehicle_other.prediction[0].s - SAFE_GAP) < this->s)
+	  {
+		  return trajectory;
+	  }
+
+  }
   if (get_vehicle_ahead(otherCars,new_lane,next_lane_vehicle))
   {
-	  if (next_lane_vehicle.prediction[0].s < (this->s + SAFE_GAP))
+	  if (next_lane_vehicle.prediction[0].s < (this->s + (SAFE_GAP/2.0)))
 	  {
 		  //std::cout << "it is not safe ahead " << next_lane_vehicle.idx << " is too close " << next_lane_vehicle.prediction[0].s << std::endl;
 		  return trajectory;

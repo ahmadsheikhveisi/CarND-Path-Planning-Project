@@ -58,8 +58,10 @@ int main() {
 
   double ref_vel = SPEED_INIT;
 
+  double last_acc = 0.0;
+
   h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy,&ego,&ref_vel]
+               &map_waypoints_dx,&map_waypoints_dy,&ego,&ref_vel,&last_acc]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -101,19 +103,13 @@ int main() {
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 
-          /**
-           * TODO: define a path made up of (x,y) points that the car will visit
-           *   sequentially every .02 seconds
-           */
+
           int prev_size = previous_path_x.size();
           int points_needed = NUMBER_OF_POINTS - prev_size;
 
-           /*if(prev_size > 0)
-           {
-        	   car_s = end_path_s;
-           }*/
+
           double pred_start_time = (double)prev_size * (double)TIME_STEP;
-          double pred_duration_time = PREDICTION_HORIZON_SEC;//(double)(NUMBER_OF_POINTS - prev_size) * (double)TIME_STEP;
+          double pred_duration_time = PREDICTION_HORIZON_SEC;
           //std::cout << "##########" << std::endl;
           //std::cout << "points needed " << points_needed << std::endl;
           //std::cout << "car s " << car_s << " car d " << car_d << " car speed " << car_speed << std::endl;
@@ -137,26 +133,21 @@ int main() {
 
         	  //std::cout << "sensor fusion cars id " << t_car.idx << " d " << t_car_d << " lane " << t_car.lane << " s " << t_car.s << " v " << t_car.v << std::endl;
 
-        	  //if (car_d < (LANE_WIDTH*(lane+1)) && car_d > (LANE_WIDTH*lane))
-        	  /*if (car_lane == lane)
-        	  {
-        		  check_car_s += ((double)prev_size*TIME_STEP*check_speed);
-        		  if ((check_car_s > car_s) && ((check_car_s - car_s) < SAFE_GAP))
-        		  {
-        			  too_close = true;
-        		  }
-        	  }*/
            }
 
-		   /*ego.s = car_s;
-		   ego.a = (MPH2MPS(car_speed) - ego.v)/(float)PREDICTION_HORIZON_SEC;
-		   ego.v = MPH2MPS(car_speed);*/
+		   /*
+		    * I decided ego is the vehicle at the end of the planned trajectory. not the current vehicle
+		    * ego.s = car_s;
+		    *  ego.a = (MPH2MPS(car_speed) - ego.v)/(float)PREDICTION_HORIZON_SEC;
+		    *   ego.v = MPH2MPS(car_speed);
+		   */
 
 		   //std::cout << "********" << std::endl;
 		   ego.init(D2LANE(car_d), car_s, MPH2MPS(car_speed),0);
 		   vector<Vehicle> traj;
 		   if ((points_needed > 0) && (D2LANE(car_d) == ego.lane))
 		   {
+			   // EGO is the vehicle at the end of planned trajectory
 			   if(prev_size > 0)
 			   {
 				   ego.s = end_path_s;
@@ -165,6 +156,7 @@ int main() {
 
 			   //std::cout << "State " << ego.state << " lane " << ego.lane << " s " << ego.s << " speed " << MPS2MPH(ego.v) << " ego acc " << ego.a << std::endl;
 
+			   // if the ego is the current vehicle, we have to generate prediction.
 			   //ego.generate_predictions(0.0,pred_duration_time);
 			   traj = ego.choose_next_state(otherCars);
 
@@ -174,15 +166,6 @@ int main() {
 			   ego.realize_next_state(traj);
 
 		   }
-
-           /*if (ref_vel > MPS2MPH(ego.v))//(too_close)
-           {
-        	   ref_vel -= MPS2MPH(MAX_ACC*TIME_STEP);
-           }
-           else if (ref_vel < MPS2MPH(ego.v))
-           {
-        	   ref_vel += MPS2MPH(MAX_ACC*TIME_STEP);;
-           }*/
 
            vector<double> ptsx;
            vector<double> ptsy;
@@ -220,14 +203,7 @@ int main() {
            }
 
 
-           /*if (traj.size() > 0)
-           {
-			   vector<double> next_wp1 = getXY(traj[1].s,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*traj[1].lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
 
-			   ptsx.push_back(next_wp1[0]);
-			   ptsy.push_back(next_wp1[1]);
-           }
-           else*/
            {
         	   double temp_s;
         	   if(prev_size > 0)
@@ -238,7 +214,9 @@ int main() {
         	   {
         		   temp_s = ego.s;
         	   }
+        	   // no need to add the next state of ego to the trajectory.
         	   //vector<double> next_wp0 = getXY(ego.s,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
+
                vector<double> next_wp0 = getXY(temp_s + POINT_FORWARD_STEP,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
                vector<double> next_wp1 = getXY(temp_s + POINT_FORWARD_STEP*2,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
                vector<double> next_wp2 = getXY(temp_s + POINT_FORWARD_STEP*3,(((double)LANE_WIDTH/(double)2.0) + (LANE_WIDTH*ego.lane)),map_waypoints_s,map_waypoints_x,map_waypoints_y);
@@ -281,7 +259,9 @@ int main() {
 
           //std::cout << " target_x " << target_x << " target_y " << target_y << " target_dist " << target_dist << std::endl;
 
-          /*vector<double> pst;
+          /*
+           * JMT is abandoned, spline is selected,
+           * vector<double> pst;
           vector<double> ped;
           vector<double> poly;
 
@@ -297,14 +277,27 @@ int main() {
           // generate new points
           for (int cnt = 0; cnt < NUMBER_OF_POINTS - previous_path_x.size(); ++cnt)
           {
-        	  if (ref_vel < ego.v)
+
+        	  double new_acc = std::min(MAX_ACC,abs(ego.v - ref_vel)/TIME_STEP);
+
+        	  if (ref_vel < (ego.v - SPEED_ADJUST_MPS))
         	  {
-        		  ref_vel += MAX_ACC*TIME_STEP;
+        		  //new_acc = std::min(MAX_ACC*TIME_STEP,abs(ego.v - ref_vel));
         	  }
-        	  else if (ref_vel > ego.v)
+        	  else if (ref_vel > (ego.v + SPEED_ADJUST_MPS))
         	  {
-        		  ref_vel -= MAX_ACC*TIME_STEP;
+        		  new_acc = -1 * new_acc;//-1 * std::min(MAX_ACC*TIME_STEP,abs(ref_vel - ego.v));
         	  }
+
+        	  double jerk = abs(last_acc - new_acc)/TIME_STEP;
+        	  if (jerk > 10)
+        	  {
+        		  //std::cout << "jerk is " << jerk << std::endl;
+        	  }
+        	  last_acc = new_acc;
+
+        	  ref_vel += new_acc*TIME_STEP;
+
         	  double dist_seg = ref_vel * TIME_STEP;//((traj[1].v + ego.v) * TIME_STEP / 2.0);//evaluate_poly(poly,(cnt + 1)*TIME_STEP) - evaluate_poly(poly,cnt*TIME_STEP);//
         	  double N = target_dist/(dist_seg);
         	  double x_point = x_add_on + target_x/N;

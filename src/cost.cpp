@@ -8,6 +8,7 @@
 #include <cmath>
 #include <functional>
 #include <iterator>
+#include <algorithm>
 #include <map>
 #include <string>
 #include <vector>
@@ -24,35 +25,58 @@ using std::vector;
  * weights for cost functions.
  */
 const double EFFICIENCY = pow(10.0,5.0);
-const double TRAFIC_AVOIDANCE = 0.0;//pow(10.0,0.0);
+const double TRAFIC_AVOIDANCE = pow(10.0,0.0);//0.0;//
+const double FASTEST_LANE_DISTANCE = pow(10.0,0.0);//0.0;//
 
-// Here we have provided two possible suggestions for cost functions, but feel
-//   free to use your own! The weighted cost over all cost functions is computed
-//   in calculate_cost. The data from get_helper_data will be very useful in
-//   your implementation of the cost functions below. Please see get_helper_data
-//   for details on how the helper data is computed.
 
-/*float goal_distance_cost(const Vehicle &vehicle,
-                         const vector<Vehicle> &trajectory,
-                         const map<int, vector<Vehicle>> &predictions,
-                         map<string, float> &data) {
-  // Cost increases based on distance of intended lane (for planning a lane
-  //   change) and final lane of trajectory.
-  // Cost of being out of goal lane also becomes larger as vehicle approaches
-  //   goal distance.
-  // This function is very similar to what you have already implemented in the
-  //   "Implement a Cost Function in C++" quiz.
-  float cost;
-  float distance = data["distance_to_goal"];
-  if (distance > 0) {
-    cost = 1 - 2*exp(-(abs(2.0*vehicle.goal_lane - data["intended_lane"]
-         - data["final_lane"]) / distance));
-  } else {
-    cost = 1;
+double fastest_lane_cost(const Vehicle &vehicle,
+                        const vector<Vehicle> &trajectory,
+                        const map<int, Vehicle> &otherCars,
+                        map<string, double> &data)
+{
+	//finding the fastest going lane
+	vector<double> lane_speeds(NUMBER_OF_LANES, MAX_SPEED_MS);
+	vector<double> min_s(NUMBER_OF_LANES, std::numeric_limits<double>::max());
+
+	for (auto t_vehicle : otherCars)
+	{
+		if (t_vehicle.second.prediction[0].lane < NUMBER_OF_LANES && t_vehicle.second.prediction[0].lane >= 0)
+		{
+			if ((t_vehicle.second.prediction[0].s > vehicle.s) &&
+					(t_vehicle.second.prediction[0].s < min_s[t_vehicle.second.prediction[0].lane]))
+			{
+				min_s[t_vehicle.second.prediction[0].lane] = t_vehicle.second.prediction[0].s;
+				lane_speeds[t_vehicle.second.prediction[0].lane] = t_vehicle.second.prediction[0].v;
+			}
+		}
+	}
+
+  double cost = 0.0;
+
+  for (int cnt = 0; cnt < NUMBER_OF_LANES; ++cnt)
+  {
+	  lane_speeds[cnt] = (MAX_SPEED_MS - lane_speeds[cnt])/min_s[cnt];
+	  double t_cost = lane_speeds[cnt] * (exp(-(abs(2.0*cnt - data["intended_lane"]
+										 - data["final_lane"]))));
+	  //std::cout << "cost for " << cnt << " lane is " << t_cost << " " << lane_speeds[cnt] << " " << min_s[cnt] << std::endl;
+	  cost += t_cost;
   }
 
+  if (cost < 0.01)
+  {
+	  cost = 0.0;
+  }
+
+	//auto iter = std::min_element(begin(lane_speeds),end(lane_speeds));
+
+	//int fastest_lane = iter - lane_speeds.begin();
+    //cost = 1 - exp(-(abs(2.0*fastest_lane - data["intended_lane"]
+    //     - data["final_lane"])));
+
+    //std::cout << "cost for fastest lane is " << cost << " " << fastest_lane << " " << max_speed << std::endl;
+
   return cost;
-}*/
+}
 
 double traffic_avoidance_cost(const Vehicle &vehicle,
                         const vector<Vehicle> &trajectory,
@@ -61,13 +85,31 @@ double traffic_avoidance_cost(const Vehicle &vehicle,
 {
 	double res_cost = 0.0;
 
+	double min_s = std::numeric_limits<double>::max();
+
+	double lane_speed = MAX_SPEED_MS;
+
 	for (auto t_vehicle : otherCars)
 	{
 		if ((t_vehicle.second.prediction[0].lane == static_cast<int>(data["intended_lane"])) &&
-				(t_vehicle.second.prediction[0].s > vehicle.s))
+				(t_vehicle.second.prediction[0].s > vehicle.s) &&
+				(t_vehicle.second.prediction[0].s < min_s))
 		{
-			res_cost += 1.0;
+			min_s = t_vehicle.second.prediction[0].s;
+			lane_speed = t_vehicle.second.prediction[0].v;
+
+			res_cost += 0.001;
 		}
+	}
+
+	double distance = (min_s - vehicle.s);
+
+	res_cost += (MAX_SPEED_MS - lane_speed)/(distance);
+
+	if (res_cost < 0.1)
+	{
+		//std::cout << "cost is so small " << distance << " " << (MAX_SPEED_MS - lane_speed) << std::endl;
+		res_cost = 0.0;
 	}
 
 	return res_cost;
@@ -79,9 +121,6 @@ double inefficiency_cost(const Vehicle &vehicle,
                         map<string, double> &data) {
   // Cost becomes higher for trajectories with intended lane and final lane
   //   that have traffic slower than vehicle's target speed.
-  // You can use the lane_speed function to determine the speed for a lane.
-  // This function is very similar to what you have already implemented in
-  //   the "Implement a Second Cost Function in C++" quiz.
   double proposed_speed_intended = data["intended_speed"];
   if (proposed_speed_intended < 0) {
     proposed_speed_intended = MAX_SPEED_MS;
@@ -114,8 +153,8 @@ double calculate_cost(const Vehicle &egoVehicle,
   vector<std::function<double(const Vehicle &, const vector<Vehicle> &,
                              const map<int, Vehicle> &,
                              map<string, double> &)
-    >> cf_list = { inefficiency_cost,traffic_avoidance_cost};//goal_distance_cost,
-  vector<double> weight_list = {EFFICIENCY,TRAFIC_AVOIDANCE};
+    >> cf_list = { inefficiency_cost,traffic_avoidance_cost,fastest_lane_cost};
+  vector<double> weight_list = {EFFICIENCY,TRAFIC_AVOIDANCE,FASTEST_LANE_DISTANCE};
 
   for (int i = 0; i < cf_list.size(); ++i) {
     double new_cost = weight_list[i]*cf_list[i](egoVehicle, trajectory, otherCars,

@@ -58,6 +58,8 @@ class Vehicle {
 
   void realize_next_state(vector<Vehicle> &trajectory);
 
+  void init(int t_lane, double t_s, double t_v, double t_a);
+
 
   // public Vehicle variables
   struct collider{
@@ -83,8 +85,6 @@ class Vehicle {
   double pred_horizon;
 
   bool initialized = false;
-
-  void init(int t_lane, double t_s, double t_v, double t_a);
 
 };
 
