@@ -279,7 +279,7 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state,
 
   Vehicle vehicle_other;
   if (get_vehicle_ahead(otherCars, this->lane, vehicle_other)) {
-	  if ((vehicle_other.prediction[0].s - SAFE_GAP) < this->s)
+	  if ((vehicle_other.prediction[0].s - (SAFE_GAP * 0.9)) < this->s)
 	  {
 		  return trajectory;
 	  }
@@ -287,7 +287,7 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state,
   }
   if (get_vehicle_ahead(otherCars,new_lane,next_lane_vehicle))
   {
-	  if (next_lane_vehicle.prediction[0].s < (this->s + (SAFE_GAP/2.0)))
+	  if (next_lane_vehicle.prediction[0].s < (this->s + (SAFE_GAP * 0.7)))
 	  {
 		  //std::cout << "it is not safe ahead " << next_lane_vehicle.idx << " is too close " << next_lane_vehicle.prediction[0].s << std::endl;
 		  return trajectory;
@@ -295,7 +295,7 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state,
   }
   if (get_vehicle_behind(otherCars,new_lane,next_lane_vehicle))
   {
-	  if (next_lane_vehicle.prediction[0].s > (this->s - (SAFE_GAP/2.0)))
+	  if (next_lane_vehicle.prediction[0].s > (this->s - (SAFE_GAP * 0.7)))
 	  {
 		  //std::cout << "it is not safe behind " << next_lane_vehicle.idx << " is too close " << next_lane_vehicle.prediction[0].s << std::endl;
 		  return trajectory;

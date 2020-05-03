@@ -14,7 +14,7 @@
 #define MAX_SPEED_MS MPH2MPS(MAX_SPEED)
 #define LANE_INIT 1
 #define SPEED_INIT 0.0
-#define MAX_ACC 5.0//8.0//10.0
+#define MAX_ACC 5.0//8.0//10.0//
 #define MAX_JERK 10.0
 #define TIME_STEP 0.02
 #define LANE_WIDTH 4

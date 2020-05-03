@@ -24,9 +24,9 @@ using std::vector;
 /**
  * weights for cost functions.
  */
-const double EFFICIENCY = pow(10.0,5.0);
-const double TRAFIC_AVOIDANCE = pow(10.0,0.0);//0.0;//
-const double FASTEST_LANE_DISTANCE = pow(10.0,0.0);//0.0;//
+const double EFFICIENCY = pow(10.0,3.0);
+const double TRAFIC_AVOIDANCE = pow(10.0,1.0);//0.0;//
+const double FASTEST_LANE_DISTANCE = pow(10.0,2.0);//0.0;//
 
 
 double fastest_lane_cost(const Vehicle &vehicle,
@@ -38,31 +38,51 @@ double fastest_lane_cost(const Vehicle &vehicle,
 	vector<double> lane_speeds(NUMBER_OF_LANES, MAX_SPEED_MS);
 	vector<double> min_s(NUMBER_OF_LANES, std::numeric_limits<double>::max());
 
+	double intended_s = data["intended_s"];
+	int intended_lane = static_cast<int>(data["intended_lane"]);
+
+	//std::cout << "intended_s " << intended_s << " intended lane " << intended_lane << std::endl;
+
 	for (auto t_vehicle : otherCars)
 	{
-		if (t_vehicle.second.prediction[0].lane < NUMBER_OF_LANES && t_vehicle.second.prediction[0].lane >= 0)
+		Vehicle &p_vehicle = t_vehicle.second.prediction[1];
+
+		if (p_vehicle.lane < NUMBER_OF_LANES && p_vehicle.lane >= 0)
 		{
-			if ((t_vehicle.second.prediction[0].s > vehicle.s) &&
-					(t_vehicle.second.prediction[0].s < min_s[t_vehicle.second.prediction[0].lane]))
+			if ((p_vehicle.s > intended_s) &&
+					(p_vehicle.s < min_s[p_vehicle.lane]))
 			{
-				min_s[t_vehicle.second.prediction[0].lane] = t_vehicle.second.prediction[0].s;
-				lane_speeds[t_vehicle.second.prediction[0].lane] = t_vehicle.second.prediction[0].v;
+				min_s[p_vehicle.lane] = p_vehicle.s;
+				lane_speeds[p_vehicle.lane] = std::min(p_vehicle.v,MAX_SPEED_MS);
 			}
 		}
 	}
 
   double cost = 0.0;
 
+  vector<double> lane_cost;
+
   for (int cnt = 0; cnt < NUMBER_OF_LANES; ++cnt)
   {
-	  lane_speeds[cnt] = (MAX_SPEED_MS - lane_speeds[cnt])/min_s[cnt];
-	  double t_cost = lane_speeds[cnt] * (exp(-(abs(2.0*cnt - data["intended_lane"]
-										 - data["final_lane"]))));
-	  //std::cout << "cost for " << cnt << " lane is " << t_cost << " " << lane_speeds[cnt] << " " << min_s[cnt] << std::endl;
-	  cost += t_cost;
+	  lane_speeds[cnt] = (MAX_SPEED_MS - lane_speeds[cnt]);
+	  min_s[cnt] = (min_s[cnt] - intended_s);
+
+	  lane_cost.push_back(lane_speeds[cnt]/min_s[cnt]);
   }
 
-  if (cost < 0.01)
+  int fastest_lane = std::min_element(lane_cost.begin(),lane_cost.end()) - lane_cost.begin();
+
+  double t_cost = fabs(lane_cost[fastest_lane] - lane_cost[intended_lane]) * fabs(fastest_lane - intended_lane);
+
+  if (t_cost > 0.0)
+  {
+	  //std::cout << "fastest lane " << fastest_lane << " " << lane_cost[0] << " " << lane_cost[1] << " " << lane_cost[2] << std::endl;
+
+	  //std::cout << "cost for lane " << intended_lane << " is " << t_cost << " " << lane_speeds[intended_lane] << " " << min_s[intended_lane] << std::endl;
+  }
+  cost += t_cost;
+
+  if (cost < 0.05)
   {
 	  cost = 0.0;
   }
@@ -89,24 +109,30 @@ double traffic_avoidance_cost(const Vehicle &vehicle,
 
 	double lane_speed = MAX_SPEED_MS;
 
+	double intended_s = data["intended_s"];
+
 	for (auto t_vehicle : otherCars)
 	{
-		if ((t_vehicle.second.prediction[0].lane == static_cast<int>(data["intended_lane"])) &&
-				(t_vehicle.second.prediction[0].s > vehicle.s) &&
-				(t_vehicle.second.prediction[0].s < min_s))
+		Vehicle &p_vehicle = t_vehicle.second.prediction[1];
+		int t_lane = p_vehicle.lane;
+		int t_s = p_vehicle.s;
+		int t_v = p_vehicle.v;
+		if ((t_lane  == static_cast<int>(data["intended_lane"])) &&
+				(t_s > intended_s) &&
+				(t_s < min_s))
 		{
-			min_s = t_vehicle.second.prediction[0].s;
-			lane_speed = t_vehicle.second.prediction[0].v;
+			min_s = t_s;
+			lane_speed = t_v;
 
 			res_cost += 0.001;
 		}
 	}
 
-	double distance = (min_s - vehicle.s);
+	double distance = (min_s - intended_s);
 
-	res_cost += (MAX_SPEED_MS - lane_speed)/(distance);
+	res_cost += std::max((MAX_SPEED_MS - lane_speed),0.0)/(distance);
 
-	if (res_cost < 0.1)
+	if (res_cost < 0.05)
 	{
 		//std::cout << "cost is so small " << distance << " " << (MAX_SPEED_MS - lane_speed) << std::endl;
 		res_cost = 0.0;
@@ -179,26 +205,29 @@ map<string, double> get_helper_data(const Vehicle &vehicle,
   //   cost functions.
   map<string, double> trajectory_data;
   Vehicle trajectory_last = trajectory[1];
-  double intended_speed;
-  int intended_lane;
+  double intended_speed = trajectory_last.v;
+  int intended_lane = trajectory_last.lane;
+  double intended_s = trajectory_last.s;
 
-  if ((trajectory_last.state.compare("PLCL") == 0) || (trajectory_last.state.compare("PLCR") == 0)) {
+  if ((trajectory_last.state.compare("PLCL") == 0) || (trajectory_last.state.compare("PLCR") == 0))
+  {
 	  intended_speed = trajectory[2].v;
 	  intended_lane = trajectory[2].lane;
-  } else {
-	  intended_speed = trajectory_last.v;
-	  intended_lane = trajectory_last.lane;
+	  intended_s = trajectory[2].s;
   }
 
-  //float distance_to_goal = vehicle.goal_s - trajectory_last.s;
+  double final_s = trajectory_last.s;
   double final_speed = trajectory_last.v;
   double final_lane = trajectory_last.lane;
 
   trajectory_data["intended_speed"] = intended_speed;
   trajectory_data["final_speed"] = final_speed;
+
   trajectory_data["intended_lane"] = intended_lane;
   trajectory_data["final_lane"] = final_lane;
-  //trajectory_data["distance_to_goal"] = distance_to_goal;
+
+  trajectory_data["intended_s"] = intended_s;
+  trajectory_data["final_s"] = final_s;
 
   return trajectory_data;
 }
